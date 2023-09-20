@@ -76,7 +76,7 @@ impl AggCall {
                 | AggKind::Max
                 | AggKind::FirstValue
                 | AggKind::LastValue
-                | AggKind::InternalArbitraryValue,
+                | AggKind::InternalLastSeenValue,
                 [input],
             ) => input.clone(),
             (AggKind::ArrayAgg, [input]) => List(Box::new(input.clone())),

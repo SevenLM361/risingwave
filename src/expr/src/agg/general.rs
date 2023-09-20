@@ -91,9 +91,13 @@ fn last_value<T>(_: T, input: T) -> T {
     input
 }
 
-#[aggregate("internal_arbitrary_value(*) -> auto", state = "ref")]
-fn internal_arbitrary_value<T>(_state: T, input: T, _retract: bool) -> T {
-    input
+#[aggregate("internal_last_seen_value(*) -> auto", state = "ref")]
+fn internal_last_seen_value<T>(state: T, input: T, retract: bool) -> T {
+    if retract {
+        state
+    } else {
+        input
+    }
 }
 
 /// Note the following corner cases:

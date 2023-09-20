@@ -238,8 +238,8 @@ pub enum AggKind {
     Mode,
     Grouping,
 
-    /// Return arbitrary one of the input values, and never change even on Update/Delete.
-    InternalArbitraryValue,
+    /// Return last seen one of the input values.
+    InternalLastSeenValue,
 }
 
 impl AggKind {
@@ -271,7 +271,7 @@ impl AggKind {
             PbType::PercentileDisc => Ok(AggKind::PercentileDisc),
             PbType::Mode => Ok(AggKind::Mode),
             PbType::Grouping => Ok(AggKind::Grouping),
-            PbType::InternalArbitraryValue => Ok(AggKind::InternalArbitraryValue),
+            PbType::InternalLastSeenValue => Ok(AggKind::InternalLastSeenValue),
             PbType::Unspecified => bail!("Unrecognized agg."),
         }
     }
@@ -304,7 +304,7 @@ impl AggKind {
             Self::PercentileDisc => PbType::PercentileDisc,
             Self::Mode => PbType::Mode,
             Self::Grouping => PbType::Grouping,
-            Self::InternalArbitraryValue => PbType::InternalArbitraryValue,
+            Self::InternalLastSeenValue => PbType::InternalLastSeenValue,
         }
     }
 }
@@ -433,7 +433,7 @@ pub mod agg_kinds {
                 | AggKind::BoolAnd
                 | AggKind::BoolOr
                 | AggKind::ApproxCountDistinct
-                | AggKind::InternalArbitraryValue
+                | AggKind::InternalLastSeenValue
         };
     }
     pub use single_value_state;
@@ -468,7 +468,7 @@ impl AggKind {
             | AggKind::Min
             | AggKind::Max
             | AggKind::Sum
-            | AggKind::InternalArbitraryValue => Some(self),
+            | AggKind::InternalLastSeenValue => Some(self),
             AggKind::Sum0 | AggKind::Count => Some(AggKind::Sum0),
             agg_kinds::simply_cannot_two_phase!() => None,
             agg_kinds::rewritten!() => None,
