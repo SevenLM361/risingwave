@@ -627,6 +627,8 @@ impl DdlController {
         let default_parallelism = fragment_graph.default_parallelism();
         let internal_tables = fragment_graph.internal_tables();
 
+        println!("streaming job {:#?}", stream_job);
+
         // 1. Resolve the upstream fragments, extend the fragment graph to a complete graph that
         // contains all information needed for building the actor graph.
         let upstream_mview_fragments = self
