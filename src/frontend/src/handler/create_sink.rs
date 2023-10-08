@@ -348,16 +348,16 @@ pub async fn handle_create_sink(
             for (id, fragment) in graph.fragments.iter_mut() {
                 println!("id {}, {}", id, fragment.fragment_type_mask);
 
-                if let Some(x) = &mut fragment.node {
-                    if let Some(NodeBody::Source(s)) = &x.node_body && s.source_inner.is_none() {
-                        x.node_body = Some(NodeBody::Merge(MergeNode{
-                            upstream_actor_id: vec![],
-                            upstream_fragment_id: 0,
-                            upstream_dispatcher_type: DispatcherType::Unspecified.into() ,
-                            fields: vec![],
-                        }));
-                    }
-                }
+                // if let Some(x) = &mut fragment.node {
+                //     if let Some(NodeBody::Source(s)) = &x.node_body && s.source_inner.is_none() {
+                //         x.node_body = Some(NodeBody::Merge(MergeNode{
+                //             upstream_actor_id: vec![],
+                //             upstream_fragment_id: 0,
+                //             upstream_dispatcher_type: DispatcherType::Unspecified.into() ,
+                //             fields: vec![],
+                //         }));
+                //     }
+                // }
                 // fragment.
 
                 // if let Some(node) = &fragment.node {

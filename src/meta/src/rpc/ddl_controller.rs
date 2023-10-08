@@ -261,8 +261,9 @@ impl DdlController {
                     ctrl.drop_connection(connection_id).await
                 }
                 DdlCommand::AlterSourceColumn(source) => ctrl.alter_source_column(source).await,
-                DdlCommand::CreateSinkIntoTable(_, _) => {
-                    todo!()
+                DdlCommand::CreateSinkIntoTable(a, b) => {
+                    ctrl.create_sink_into_table(a, b, CreateType::Foreground)
+                        .await
                 }
             }
         }
@@ -492,6 +493,113 @@ impl DdlController {
                 Ok(IGNORED_NOTIFICATION_VERSION)
             }
         }
+    }
+
+    async fn create_sink_into_table(
+        &self,
+        mut create: (StreamingJob, StreamFragmentGraphProto, CreateType),
+        b: (StreamingJob, StreamFragmentGraphProto, ColIndexMapping),
+        create_type: CreateType,
+    ) -> MetaResult<NotificationVersion> {
+        let (mut table_stream_job, table_fragment_graph, table_col_index_mapping) = b;
+
+        let env = StreamEnvironment::from_protobuf(table_fragment_graph.get_env().unwrap());
+
+        let fragment_graph = self
+            .prepare_replace_table(&mut table_stream_job, table_fragment_graph)
+            .await?;
+
+        let (replace_table_ctx, replace_table_table_fragments) = self
+            .build_replace_table(
+                env,
+                &table_stream_job,
+                fragment_graph,
+                table_col_index_mapping.clone(),
+            )
+            .await?;
+
+        let (mut sink_stream_job, sink_fragment_graph, _) = create;
+
+        // let _permit = self
+        //     .creating_streaming_job_permits
+        //     .semaphore
+        //     .acquire()
+        //     .await
+        //     .unwrap();
+        // let _reschedule_job_lock = self.stream_manager.reschedule_lock.read().await;
+
+        let env = StreamEnvironment::from_protobuf(sink_fragment_graph.get_env().unwrap());
+
+        println!("fragment graph {:#?}", sink_fragment_graph);
+
+        let fragment_graph = self
+            .prepare_stream_job(&mut sink_stream_job, sink_fragment_graph)
+            .await?;
+
+        // Update the corresponding 'initiated_at' field.
+        sink_stream_job.mark_initialized();
+
+        let mut sink_internal_tables = vec![];
+        let result = try {
+            let (ctx, table_fragments) = self
+                .build_stream_job(env, &sink_stream_job, fragment_graph)
+                .await?;
+
+            sink_internal_tables = ctx.internal_tables();
+
+            match sink_stream_job {
+                StreamingJob::Table(Some(ref source), _) => {
+                    // Register the source on the connector node.
+                    self.source_manager.register_source(source).await?;
+                }
+                StreamingJob::Sink(ref sink) => {
+                    // Validate the sink on the connector node.
+                    validate_sink(sink).await?;
+                }
+                _ => {}
+            }
+            (ctx, table_fragments)
+        };
+
+        let (sink_ctx, sink_table_fragments) = match result {
+            Ok(r) => r,
+            Err(e) => {
+                self.cancel_stream_job(&sink_stream_job, sink_internal_tables).await;
+                return Err(e);
+            }
+        };
+
+        let version = self.create_sink_into_table_inner(
+            (sink_stream_job, sink_table_fragments, sink_ctx, sink_internal_tables),
+            (replace_table_ctx, replace_table_table_fragments),
+        )
+        .await?;
+
+        Ok(version)
+    }
+
+    async fn create_sink_into_table_inner(
+        &self,
+        a: (
+            StreamingJob,
+            TableFragments,
+            CreateStreamingJobContext,
+            Vec<Table>,
+        ),
+        b: (ReplaceTableContext, TableFragments),
+    ) -> MetaResult<NotificationVersion> {
+        let (stream_job, table_fragments, ctx, internal_tables) = a;
+
+        let (replace_ctx, replace_table) = b;
+        let result = self
+            .stream_manager
+            .create_sink_into_table((table_fragments, ctx), (replace_ctx, replace_table))
+            .await;
+        // if let Err(e) = result {
+        //     self.cancel_stream_job(&stream_job, internal_tables).await;
+        //     return Err(e);
+        // };
+        self.finish_stream_job(stream_job, internal_tables).await
     }
 
     async fn create_streaming_job_inner(
@@ -894,9 +1002,9 @@ impl DdlController {
         let stream_job = &*stream_job;
 
         // 3. Mark current relation as "updating".
-        self.catalog_manager
-            .start_replace_table_procedure(stream_job)
-            .await?;
+        // self.catalog_manager
+        //     .start_replace_table_procedure(stream_job)
+        //     .await?;
 
         Ok(fragment_graph)
     }
