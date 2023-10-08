@@ -211,7 +211,7 @@ pub async fn handle_create_sink(
 
     let target_table_name = stmt.into_table_name.clone();
 
-    let (sink, graph) = {
+    let (sink, sink_graph) = {
         let context = Rc::new(OptimizerContext::from_handler_args(handle_args));
         let (query, plan, sink) = gen_sink_plan(&session, context.clone(), stmt.clone())?;
         let has_order_by = !query.order_by.is_empty();
@@ -353,9 +353,9 @@ pub async fn handle_create_sink(
                         x.node_body = Some(NodeBody::Merge(MergeNode{
                             upstream_actor_id: vec![],
                             upstream_fragment_id: 0,
-                            upstream_dispatcher_type: DispatcherType::Hash.into() ,
+                            upstream_dispatcher_type: DispatcherType::Unspecified.into() ,
                             fields: vec![],
-                        }));;;
+                        }));
                     }
                 }
                 // fragment.
@@ -411,9 +411,21 @@ pub async fn handle_create_sink(
 
         let catalog_writer = session.catalog_writer()?;
 
+        // catalog_writer
+        //     .replace_table(source, table, graph, col_index_mapping)
+        //     .await?;
+
         catalog_writer
-            .replace_table(source, table, graph, col_index_mapping)
-            .await?;
+            .create_sink_into_table(
+                sink.to_proto(),
+                sink_graph,
+                source,
+                table,
+                graph,
+                col_index_mapping,
+            )
+            .await
+            .unwrap();
 
         return Ok(PgResponse::empty_result(StatementType::ALTER_TABLE));
         //`
@@ -431,7 +443,7 @@ pub async fn handle_create_sink(
             ));
 
     let catalog_writer = session.catalog_writer()?;
-    catalog_writer.create_sink(sink.to_proto(), graph).await?;
+    catalog_writer.create_sink(sink.to_proto(), sink_graph).await?;
 
     Ok(PgResponse::empty_result(StatementType::CREATE_SINK))
 }

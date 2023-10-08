@@ -94,6 +94,10 @@ pub enum DdlCommand {
     CreateView(View),
     DropView(ViewId, DropMode),
     CreateStreamingJob(StreamingJob, StreamFragmentGraphProto, CreateType),
+    CreateSinkIntoTable(
+        (StreamingJob, StreamFragmentGraphProto, CreateType),
+        (StreamingJob, StreamFragmentGraphProto, ColIndexMapping),
+    ),
     DropStreamingJob(StreamingJobId, DropMode),
     ReplaceTable(StreamingJob, StreamFragmentGraphProto, ColIndexMapping),
     AlterRelationName(Relation, String),
@@ -257,6 +261,9 @@ impl DdlController {
                     ctrl.drop_connection(connection_id).await
                 }
                 DdlCommand::AlterSourceColumn(source) => ctrl.alter_source_column(source).await,
+                DdlCommand::CreateSinkIntoTable(_, _) => {
+                    todo!()
+                }
             }
         }
         .in_current_span();
@@ -417,6 +424,9 @@ impl DdlController {
         let _reschedule_job_lock = self.stream_manager.reschedule_lock.read().await;
 
         let env = StreamEnvironment::from_protobuf(fragment_graph.get_env().unwrap());
+
+        println!("fragment graph {:#?}", fragment_graph);
+
         let fragment_graph = self
             .prepare_stream_job(&mut stream_job, fragment_graph)
             .await?;
