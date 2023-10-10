@@ -40,6 +40,7 @@ pub mod sink;
 pub mod source;
 pub mod system_parameter;
 pub mod table;
+pub mod trx;
 pub mod user;
 pub mod user_privilege;
 pub mod view;
