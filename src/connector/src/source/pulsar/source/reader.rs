@@ -18,6 +18,8 @@ use anyhow::{anyhow, ensure, Result};
 use async_trait::async_trait;
 use futures::StreamExt;
 use futures_async_stream::try_stream;
+use icelake::io::FileScanStream;
+use icelake::Table;
 use itertools::Itertools;
 use pulsar::consumer::InitialPosition;
 use pulsar::message::proto::MessageIdData;
@@ -28,10 +30,16 @@ use crate::source::pulsar::split::PulsarSplit;
 use crate::source::pulsar::{PulsarEnumeratorOffset, PulsarProperties};
 use crate::source::{
     into_chunk_stream, BoxSourceWithStateStream, Column, CommonSplitReader, SourceContextRef,
-    SourceMessage, SplitId, SplitMetaData, SplitReader,
+    SourceMessage, SourceMessages, SplitId, SplitMetaData, SplitReader,
 };
 
-pub struct PulsarSplitReader {
+pub enum PulsarSplitReader {
+    Broker(PulsarBrokerReader),
+    Iceberg(PulsarIcebergReader),
+}
+
+/// This reader reads from pulsar broker
+pub struct PulsarBrokerReader {
     pulsar: Pulsar<TokioExecutor>,
     consumer: Consumer<Vec<u8>, TokioExecutor>,
     split: PulsarSplit,
@@ -84,7 +92,7 @@ fn parse_message_id(id: &str) -> Result<MessageIdData> {
 }
 
 #[async_trait]
-impl SplitReader for PulsarSplitReader {
+impl SplitReader for PulsarBrokerReader {
     type Properties = PulsarProperties;
     type Split = PulsarSplit;
 
@@ -173,7 +181,7 @@ impl SplitReader for PulsarSplitReader {
     }
 }
 
-impl CommonSplitReader for PulsarSplitReader {
+impl CommonSplitReader for PulsarBrokerReader {
     #[try_stream(ok = Vec<SourceMessage>, error = anyhow::Error)]
     async fn into_data_stream(self) {
         let max_chunk_size = self.source_ctx.source_ctrl_opts.chunk_size;
@@ -185,6 +193,51 @@ impl CommonSplitReader for PulsarSplitReader {
                 res.push(msg);
             }
             yield res;
+        }
+    }
+}
+
+/// Read history data from iceberg table
+pub struct PulsarIcebergReader {
+    split: PulsarSplit,
+    source_ctx: SourceContextRef,
+}
+
+impl PulsarIcebergReader {
+    fn new(split: PulsarSplit, source_ctx: SourceContextRef) -> Self {
+        Self { split, source_ctx }
+    }
+
+    async fn scan(&self) -> Result<FileScanStream> {
+        let table = self.create_iceberg_table().await?;
+
+        let max_chunk_size = self.source_ctx.source_ctrl_opts.chunk_size;
+
+        // TODO: Add partition
+        Ok(table
+            .new_scan_builder()
+            .with_batch_size(max_chunk_size)
+            .build()?
+            .scan(&table)
+            .await?)
+    }
+
+    async fn create_iceberg_table(&self) -> Result<Table> {
+        todo!()
+    }
+
+    #[try_stream(ok = Vec<SourceMessage>, error = anyhow::Error)]
+    async fn into_data_stream(self) {
+        #[for_await]
+        for file_scan in self.scan().await? {
+            let file_scan = file_scan?;
+
+            #[for_await]
+            for record_batch in file_scan.scan().await? {
+                let batch = record_batch?;
+                let msgs = SourceMessages::try_from((&batch, &self.split.topic))?.0;
+                yield msgs;
+            }
         }
     }
 }

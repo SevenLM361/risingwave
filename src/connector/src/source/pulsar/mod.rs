@@ -22,7 +22,7 @@ use serde::Deserialize;
 pub use split::*;
 
 use crate::common::PulsarCommon;
-use crate::source::pulsar::source::reader::PulsarSplitReader;
+use crate::source::pulsar::source::reader::PulsarBrokerReader;
 use crate::source::SourceProperties;
 
 pub const PULSAR_CONNECTOR: &str = "pulsar";
@@ -30,7 +30,7 @@ pub const PULSAR_CONNECTOR: &str = "pulsar";
 impl SourceProperties for PulsarProperties {
     type Split = PulsarSplit;
     type SplitEnumerator = PulsarSplitEnumerator;
-    type SplitReader = PulsarSplitReader;
+    type SplitReader = PulsarBrokerReader;
 
     const SOURCE_NAME: &'static str = PULSAR_CONNECTOR;
 }

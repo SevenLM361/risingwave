@@ -456,6 +456,9 @@ pub struct SourceMessage {
 }
 
 #[derive(Debug, Clone)]
+pub struct SourceMessages(pub Vec<SourceMessage>);
+
+#[derive(Debug, Clone)]
 pub enum SourceMeta {
     Kafka(KafkaMeta),
     Nexmark(NexmarkMeta),
